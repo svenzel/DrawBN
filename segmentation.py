@@ -94,6 +94,9 @@ class castClrs:
                 return int((array[index]+array[index+1])/2.)
             else:
                 return 0
+            
+        # needed for coloor comparison
+        referenceImage = workingImage.copy()
         
         int0 = np.linspace(0, 255, segC0 + 1)
         int1 = np.linspace(0, 255, segC1 + 1)
@@ -102,17 +105,17 @@ class castClrs:
         for i in range(segC0):
             # value the values between int[i]/int[i+1] will be cast to
             valCast = valueCast(int0, i, mode)       
-            mask = (workingImage[:,:,0] >= int0[i]) & (workingImage[:,:,0] <= int0[i+1])            
+            mask = (referenceImage[:,:,0] >= int0[i]) & (referenceImage[:,:,0] <= int0[i+1])            
             workingImage[mask, 0] = valCast
         for i in range(segC1):
             # value the values between int[i]/int[i+1] will be cast to
             valCast = valueCast(int1, i, mode)       
-            mask = (workingImage[:,:,1] >= int1[i]) & (workingImage[:,:,1] <= int0[i+1])            
+            mask = (referenceImage[:,:,1] >= int1[i]) & (referenceImage[:,:,1] <= int1[i+1])            
             workingImage[mask, 1] = valCast
         for i in range(segC2):
             # value the values between int[i]/int[i+1] will be cast to
             valCast = valueCast(int2, i, mode)       
-            mask = (workingImage[:,:,2] >= int2[i]) & (workingImage[:,:,2] <= int0[i+1])            
+            mask = (referenceImage[:,:,2] >= int2[i]) & (referenceImage[:,:,2] <= int2[i+1])            
             workingImage[mask, 2] = valCast       
         
         # update segmentedImages
