@@ -72,15 +72,19 @@ class castClrs:
         plt.show()
     
     
-    def segment(self, segC0=8, segC1=8, segC2=8, clrs='rgb', mode='ceil'):
-        """Does the colorspace segmentation.
+    def segment(self, segC0=8, segC1=8, segC2=8, clrs='rgb', mode='weighted', castMode='ceil'):
+        """Does an equidistant colorspace segmentation. Each segment has the same length in colorspace.
         -segC0, segC1 and segC2 are the numbers of segments wanted for the respective colorchannels
         -clrs is the colorspace in which the segmentation should take place and can be 'rgb' or 'hsv'
-        -mode is the way colorvalues will be cast and can be 'floor', 'ceil' or 'mean'"""
+        -mode is the way segmentsizes will be chosen:
+            'linear' does an equidistant colorspace segmentation. Each segment has the same length in colorspace.
+            'weighted' does a colorspace segmentation where each segment's length will be chosen by the amount of pixels which occupy the segment. Each segment is chosen to have the same amount of pixels in them.
+        -castMode is the way colorvalues will be cast and can be 'floor', 'ceil' or 'mean'"""
         timeStart = time.clock()
         
         # define modes
-        modes = ['floor', 'ceil', 'mean']        
+        modes = ['linear', 'weighted']
+        castModes = ['floor', 'ceil', 'mean']        
         # set working image
         if (clrs == 'rgb'):
             workingImage = self.imageRGB.copy()
@@ -89,17 +93,20 @@ class castClrs:
         else:
             print('Colorspace "'+str(clrs)+'" not found')
             return 0
-        # exception handling: mode
+        # exception handling: modes
         if not (mode in modes):
-            print('Mode "'+str(mode)+'" not found')
+            print('Mode "'+str(mode)+'" not found. Available modes are: '+str(modes))
+            return 0
+        if not (castMode in castModes):
+            print('Castmode "'+str(castMode)+'" not found')
             return 0
             
         def valueCast(array, index, mode):
-            if (mode == 'floor'):
+            if (castMode == 'floor'):
                 return int(array[index])
-            elif (mode == 'ceil'):
+            elif (castMode == 'ceil'):
                 return int(array[index+1])
-            elif (mode == 'mean'):
+            elif (castMode == 'mean'):
                 return int((array[index]+array[index+1])/2.)
             else:
                 return 0
@@ -107,21 +114,55 @@ class castClrs:
         # needed for color comparison
         referenceImage = workingImage.copy()
         
-        int0 = np.linspace(0, 255, segC0 + 1)
-        int1 = np.linspace(0, 255, segC1 + 1)
-        int2 = np.linspace(0, 255, segC2 + 1)
+        # compute arrays which consist of the segments' borders
+        if (mode == 'linear'):
+            int0 = np.linspace(0, 255, segC0 + 1)
+            int1 = np.linspace(0, 255, segC1 + 1)
+            int2 = np.linspace(0, 255, segC2 + 1)
+        if (mode == 'weighted'):
+            histR, bin_edges = np.histogram(workingImage[:,:,0], bins=255, normed=True)
+            histG, bin_edges = np.histogram(workingImage[:,:,1], bins=255, normed=True)
+            histB, bin_edges = np.histogram(workingImage[:,:,2], bins=255, normed=True)
+            hist = np.array([histR, histG, histB], dtype=float)
+            
+            int0 = np.zeros(segC0+1)
+            int1 = np.zeros(segC0+1)
+            int2 = np.zeros(segC0+1)
+            intervals = np.array([int0, int1, int2], dtype=int)
+            
+            segmentCount = np.array([segC0, segC1, segC2], dtype=int)
+            weights = 1/(segmentCount.astype(float))
+            
+            # process i-th histogram
+            for i in range(3):
+                # set j-th border, where 0-th border is zero and last border is 255
+                for j in range(1, segmentCount[i]):
+                    cumSum = 0.
+                    counter = intervals[i][j-1] # set counter to last aquired border
+                    while(cumSum < weights[i]):
+                        counter += 1
+                        if (counter >= 255): 
+                            break
+                        cumSum += hist[i][counter]                  
+                    intervals[i][j] = counter
+                intervals[i][segmentCount[i]] = 255
+            int0 = intervals[0]
+            int1 = intervals[1]
+            int2 = intervals[2]
+            
+            
         
         for i in range(segC0):
             # value the values between int[i]/int[i+1] will be cast to
-            valCast = valueCast(int0, i, mode)       
+            valCast = valueCast(int0, i, castMode)       
             mask = (referenceImage[:,:,0] >= int0[i]) & (referenceImage[:,:,0] <= int0[i+1])            
             workingImage[mask, 0] = valCast
         for i in range(segC1):
-            valCast = valueCast(int1, i, mode)       
+            valCast = valueCast(int1, i, castMode)       
             mask = (referenceImage[:,:,1] >= int1[i]) & (referenceImage[:,:,1] <= int1[i+1])            
             workingImage[mask, 1] = valCast
         for i in range(segC2):
-            valCast = valueCast(int2, i, mode)       
+            valCast = valueCast(int2, i, castMode)       
             mask = (referenceImage[:,:,2] >= int2[i]) & (referenceImage[:,:,2] <= int2[i+1])            
             workingImage[mask, 2] = valCast       
         
@@ -132,6 +173,27 @@ class castClrs:
         if (clrs == 'hsv'):
             self.segmentedHSV = workingImage
             self.updateRGBSegment()
+        
+        self.computationTime = time.clock() - timeStart
+        
+    def weightedSegment(self, segC0=4, segC1=4, segC2=4, mode=''):
+        """Does a colorspace segmentation where each segment's length will be chosen by the amount of pixels which occupy the segment.
+        Each segment is chosen to have the same amount of pixels in them.
+        -segC0, segC1 and segC2 are the numbers of segments wanted for the respective colorchannels"""
+        timeStart = time.clock()
+        
+        # define modes
+        modes = ['']        
+        # set working image
+        workingImage = self.imageRGB.copy()        
+        referenceImage = workingImage.copy()
+        # exception handling: mode
+        if not (mode in modes):
+            print('Mode "'+str(mode)+'" not found')
+            return 0
+        
+        
+        
         
         self.computationTime = time.clock() - timeStart
             
@@ -156,6 +218,7 @@ class extractConnComp():
         self.colorNumber = None
         self.connCompNumber = None
         self.computationTime = None
+        self.cutConnComp = None
     
 
     def extract(self):
@@ -170,7 +233,7 @@ class extractConnComp():
         # connCompClrs is a connected component image where pixels are
         # connected in colorspace, but not in space
         self.connComp = np.zeros((self.image.shape[0], self.image.shape[1]))
-        connCompCount = 1   # offset by 1 because 0 is recognized as background
+        connCompCount = 0
         
         # each iteration will first find pixels of same color and then build
         # spacially connected components into the image connComp
@@ -179,9 +242,10 @@ class extractConnComp():
                 (self.image[:,:,1] == colorArray[i][1]) &
                 (self.image[:,:,2] == colorArray[i][2])))
             connCompTemp, deltaConnCompCount = ndimage.label(connCompClrs)
-            self.connComp += connCompTemp+connCompCount-np.uint8(connCompTemp==0)
+            self.connComp += connCompTemp+connCompCount-np.uint8(connCompTemp==0)*connCompCount
             connCompCount += deltaConnCompCount
-            
+        
+        #self.connComp = np.uint8(self.connComp)
         self.colorNumber = colorArray.size
         self.connCompNumber = np.unique(self.connComp).size
         self.computationTime = (time.clock() - timeStart)
@@ -208,10 +272,33 @@ class extractConnComp():
             print('Number of different colors from colorspace segmentation: ' + str(self.colorNumber))
             print('Number of connected components: ' + str(np.unique(self.connComp).size) + '\n')
             
-            
+    def showConnCompHist(self, binNumber=10):
+        """Shows histogram of pixel number in connected components
+        Histogram will show bins from 1 to binNumber"""
+        y, x = np.array(self.connComp.shape, dtype=float)
+        grid = np.ones_like(self.connComp)
+        histData = ndimage.sum(grid, self.connComp, index=range(int(self.connComp.max())))
+        n, bins, patches = plt.hist(histData, bins=binNumber, range=(1,binNumber+1))
+        plt.axis([1, binNumber+1, 1, n.max()])
+        plt.xlabel('Number of pixels')
+        plt.ylabel('Count')
+        #plt.yscale('log')
+        plt.title('Histogram of connected component sizes')
+        plt.text(3, n.max()/2., 'Number of components in this Histogram: ' + str(n[0:binNumber].sum()) + 
+            '\n This amounts to '+str(round(n[0:binNumber].sum()/np.float(self.connCompNumber)*100, 2))+'% of connected components \n and '
+            +str(round(n[0:binNumber].sum()/y/x*100, 2))+'% of pixels in the image')
+        plt.show()
         
-        
-        
+    def remConnComp(self, lowerThres=10):
+        """Removes all components with size <= lowerThres from self.connComp and saves to self.cutConnComp"""
+        # count: array where i-th component contains # of pixels with value i
+        grid = np.ones_like(self.connComp)
+        pixelSum = ndimage.sum(grid, self.connComp, index=range(int(self.connComp.max())))
+        mask = (pixelSum <= lowerThres)
+        self.cutConnComp = self.connComp.copy()
+        self.cutConnComp[mask[np.uint8(self.connComp)]] = 0
+        plt.imshow(self.cutConnComp); plt.show()
+        print('Number of connected components: ' + str(np.unique(self.cutConnComp).size))
         
         
         
